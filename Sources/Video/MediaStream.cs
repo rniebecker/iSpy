@@ -48,6 +48,7 @@ namespace iSpyApplication.Sources.Video
         private DateTime _lastPacket;
         private bool _stopReadingFrames;
         private Thread _thread;
+        private Thread _threadProcessing;
         private DateTime _lastVideoFrame;
         private ReasonToFinishPlaying _res = ReasonToFinishPlaying.DeviceLost;
 
@@ -191,6 +192,7 @@ namespace iSpyApplication.Sources.Video
             }
 
             ffmpeg.av_dict_set(&options, "rtbufsize", "10000000", 0);
+            ffmpeg.av_dict_set(&options, "buffer_size", "10000000", 0);
 
             var lo = _options.Split(Environment.NewLine.ToCharArray());
             foreach (var nv in lo)
@@ -393,8 +395,42 @@ namespace iSpyApplication.Sources.Video
 
             _lastPacket = DateTime.UtcNow;
 
+            _threadProcessing = new Thread(ProcessFrames) { Name = Source, IsBackground = true };
+            _threadProcessing.Start();
+
             _thread = new Thread(ReadFrames) { Name = Source, IsBackground = true };
             _thread.Start();
+
+        }
+
+        Bitmap _actualBitmap = null;
+        bool _newFrame = false;
+        Object _lockHelper = new Object();
+
+        private void ProcessFrames()
+        {
+            do
+            {
+                if (_actualBitmap != null && _newFrame)
+                {
+                    try
+                    {
+                        Bitmap b = null;
+                        NewFrameEventArgs nfe;
+                        lock (_lockHelper)
+                        {
+                            b = (Bitmap)_actualBitmap.Clone();   
+                        }
+                        nfe = new NewFrameEventArgs(b);
+                        NewFrame.Invoke(this, nfe);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.LogException(ex, "New Frame Error");
+                    }
+                    _newFrame = false;
+                }
+            } while (!_stopReadingFrames && !MainForm.ShuttingDown);
         }
 
         private void ReadFrames()
@@ -580,16 +616,19 @@ namespace iSpyApplication.Sources.Video
                                 break;
                             }
 
-                            
-                            using (
-                                var mat = new Bitmap(_codecContext->width, _codecContext->height, linesize,
-                                    PixelFormat.Format24bppRgb, imageBufferPtr))
+                            if (!_newFrame)
                             {
-                                var nfe = new NewFrameEventArgs((Bitmap) mat.Clone());
-                                nf.Invoke(this, nfe);
-                            }
+                                Console.WriteLine("frame->pts: {0}", frame->pts);
 
-                            _lastVideoFrame = DateTime.UtcNow;
+                                lock (_lockHelper)
+                                {
+                                    _actualBitmap = new Bitmap(_codecContext->width, _codecContext->height, linesize,
+                                        PixelFormat.Format24bppRgb, imageBufferPtr);
+
+                                    _newFrame = true;
+                                    _lastVideoFrame = DateTime.UtcNow;
+                                }
+                            }
                         }
                     }
                 }
