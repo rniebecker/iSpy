@@ -965,6 +965,11 @@ namespace iSpyApplication.Controls
                     }
                     return result;
                 }
+                catch (System.InvalidOperationException)
+                {
+                    // TODO: Need to figure out why this gets thrown sometimes
+                    result.Dispose();
+                }
                 catch
                 {
                     result.Dispose();
