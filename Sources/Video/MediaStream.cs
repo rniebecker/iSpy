@@ -74,9 +74,11 @@ namespace iSpyApplication.Sources.Video
 
         private volatile bool _starting;
         private readonly bool _modeAudio;
+        private MediaStream _instance;
 
         public MediaStream(CameraWindow source) : base(source)
         {
+            _instance = this;
             _source = source.Camobject;
             _inputFormat = null;
             _modeAudio = false;
@@ -411,18 +413,16 @@ namespace iSpyApplication.Sources.Video
         {
             do
             {
-                if (_actualBitmap != null && _newFrame)
+                if (_actualBitmap != null && _newFrame && NewFrame != null)
                 {
                     try
                     {
                         Bitmap b = null;
-                        NewFrameEventArgs nfe;
                         lock (_lockHelper)
                         {
                             b = (Bitmap)_actualBitmap.Clone();   
                         }
-                        nfe = new NewFrameEventArgs(b);
-                        NewFrame.Invoke(this, nfe);
+                        NewFrame.Invoke(_instance, new NewFrameEventArgs(b));
                     }
                     catch (Exception ex)
                     {

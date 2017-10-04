@@ -970,6 +970,11 @@ namespace iSpyApplication.Controls
                     // TODO: Need to figure out why this gets thrown sometimes
                     result.Dispose();
                 }
+                catch (System.AccessViolationException)
+                {
+                    // TODO: Need to figure out why this gets thrown sometimes
+                    result.Dispose();
+                }
                 catch
                 {
                     result.Dispose();
@@ -1030,22 +1035,34 @@ namespace iSpyApplication.Controls
 
                 try
                 {
-                    //pass and retrieve the latest bitmap from the plugin
-                    bmOrig = (Bitmap) o.GetMethod("ProcessFrame").Invoke(Plugin, new object[] {bmOrig});
+                    if (o.GetMethod("ProcessFrame") != null)
+                    {
+                        //pass and retrieve the latest bitmap from the plugin
+                        bmOrig = (Bitmap)o.GetMethod("ProcessFrame").Invoke(Plugin, new object[] { bmOrig });
+                    }
+                }
+                catch (System.Reflection.TargetInvocationException)
+                {
+                    // If plugin can't be called right now we simply ignore it
+                    PluginRunning = false;
+                    return bmOrig;
                 }
                 catch (Exception ex)
                 {
                     ErrorHandler?.Invoke(ex.Message);
                 }
 
-                //check the plugin alert flag and alarm if it is set
-                var pluginAlert = (string) o.GetField("Alert").GetValue(Plugin);
-                if (pluginAlert != "")
-                    Alert?.Invoke(pluginAlert, EventArgs.Empty);
-                
-                //reset the plugin alert flag if it supports that
-                if (o.GetMethod("ResetAlert") != null)
-                    o.GetMethod("ResetAlert").Invoke(_plugin, null);
+                if (o.GetMethod("ProcessFrame") != null)
+                {
+                    //check the plugin alert flag and alarm if it is set
+                    var pluginAlert = (string)o.GetField("Alert").GetValue(Plugin);
+                    if (pluginAlert != "")
+                        Alert?.Invoke(pluginAlert, EventArgs.Empty);
+
+                    //reset the plugin alert flag if it supports that
+                    if (o.GetMethod("ResetAlert") != null)
+                        o.GetMethod("ResetAlert").Invoke(_plugin, null);
+                }
 
                 PluginRunning = false;
             }
