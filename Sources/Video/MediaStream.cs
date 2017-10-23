@@ -46,7 +46,7 @@ namespace iSpyApplication.Sources.Video
             return 0;
         }
         private DateTime _lastPacket;
-        private bool _stopReadingFrames;
+        public bool _stopReadingFrames;
         private Thread _thread;
         private Thread _threadProcessing;
         private DateTime _lastVideoFrame;
@@ -86,6 +86,7 @@ namespace iSpyApplication.Sources.Video
             _cookies = _source.settings.cookies;
             _analyzeDuration = _source.settings.analyseduration;
             _timeout = _source.settings.timeout;
+            Console.WriteLine("1 Timeout in MS: {0}", _timeout);
             _userAgent = _source.settings.useragent;
             _headers = _source.settings.headers;
             _rtsPmode = Helper.RTSPMode(_source.settings.rtspmode);
@@ -98,6 +99,7 @@ namespace iSpyApplication.Sources.Video
             _inputFormat = null;
             _modeAudio = true;
             _timeout = source.settings.timeout;
+            Console.WriteLine("2 Timeout in MS: {0}", _timeout);
             _analyzeDuration = source.settings.analyzeduration;
             _options = source.settings.ffmpeg;
         }
@@ -407,12 +409,22 @@ namespace iSpyApplication.Sources.Video
 
         Bitmap _actualBitmap = null;
         bool _newFrame = false;
-        Object _lockHelper = new Object();
+        public Object _lockHelper = new Object();
 
         private void ProcessFrames()
         {
             do
             {
+                // Need to check for stream timeout here
+                if (_videoStream != null && !_stopReadingFrames)
+                {
+                    if ((DateTime.UtcNow - _lastVideoFrame).TotalMilliseconds > _timeout)
+                    {
+                         _res = ReasonToFinishPlaying.DeviceLost;
+                        _stopReadingFrames = true;
+                    }
+                }
+
                 if (_actualBitmap != null && _newFrame && NewFrame != null)
                 {
                     try
@@ -420,7 +432,7 @@ namespace iSpyApplication.Sources.Video
                         Bitmap b = null;
                         lock (_lockHelper)
                         {
-                            b = (Bitmap)_actualBitmap.Clone();   
+                            b = (Bitmap)_actualBitmap;
                         }
                         NewFrame.Invoke(_instance, new NewFrameEventArgs(b));
                     }
@@ -770,14 +782,18 @@ namespace iSpyApplication.Sources.Video
             get
             {
                 if (_thread == null)
+                {
+                    //Console.WriteLine("IsRunning: false");
                     return false;
-
+                }
                 try
                 {
+                    //Console.WriteLine("IsRunning: {0}", !_thread.Join(TimeSpan.Zero));
                     return !_thread.Join(TimeSpan.Zero);
                 }
                 catch
                 {
+                    //Console.WriteLine("IsRunning: true");
                     return true;
                 }
             }

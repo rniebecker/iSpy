@@ -474,8 +474,7 @@ namespace iSpyApplication.Controls
             var f = e.Frame;
             if (nf==null || f==null)
                 return;
-    
-            
+
             if (_lastframeEvent > DateTime.MinValue)
             {
                 CalculateFramerates();
@@ -511,7 +510,28 @@ namespace iSpyApplication.Controls
             {            
                 try
                 {
-                    bmOrig = ResizeBmOrig(f);
+                    // Running the plugin can take some time with object detection
+                    // Need to check if sender terminated in between.
+                    if (sender is MediaStream)
+                    {
+                        MediaStream ms = (MediaStream)sender;
+                        if (ms._stopReadingFrames)
+                        {
+                            Console.WriteLine("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                            Console.WriteLine("!!!!!StopReadingFrames 1!!!!!");
+                            Console.WriteLine("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                            return;
+                        }
+
+                        lock (ms._lockHelper)
+                        {
+                            bmOrig = ResizeBmOrig(f);
+                        }
+                    }
+                    else
+                    {
+                        bmOrig = ResizeBmOrig(f);
+                    }
 
                     if (RotateFlipType != RotateFlipType.RotateNoneFlipNone)
                     {
@@ -537,6 +557,19 @@ namespace iSpyApplication.Controls
                     if (CW.Camobject.alerts.active && Plugin != null && Detect != null)
                     {
                         bmOrig = RunPlugin(bmOrig);
+                    }
+
+                    // Running the plugin can take some time with object detection
+                    // Need to check if sender terminated in between.
+                    if (sender is MediaStream)
+                    {
+                        if (((MediaStream)sender)._stopReadingFrames)
+                        {
+                            Console.WriteLine("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                            Console.WriteLine("!!!!!StopReadingFrames 2!!!!!");
+                            Console.WriteLine("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                            return;
+                        }
                     }
 
                     var bmd = bmOrig.LockBits(new Rectangle(0, 0, bmOrig.Width, bmOrig.Height), ImageLockMode.ReadWrite, bmOrig.PixelFormat);
